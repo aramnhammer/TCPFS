@@ -1,0 +1,11 @@
+[package]
+name = "server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = "0.4.38"
+uuid = "1.10.0"
+tokio = { version = "1.39.3", features = ["full"] }
+meta = { path = "../meta" }
+libsql = "0.5.0"
