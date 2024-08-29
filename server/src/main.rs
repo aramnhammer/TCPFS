@@ -25,22 +25,11 @@ data:
 +-----------------------------------------------------------------------------------------+
 */
 
-// #[derive(Debug)]
-// struct FileTransfer {
-//     command_type: u8,
-//     path_length: u32,
-//     file_length: u32,
-//     relative_path: String,
-//     file_data: Vec<u8>,
-// }
-
 struct RequestHandler;
 
 impl RequestHandler {
     async fn handle_client(mut stream: TcpStream) -> Result<()> {
-        stream
-            .write_all(b"220 Welcome to the FTP-like server\r\n")
-            .await?;
+        
         let mut command_type = [0; 1];
         stream.read_exact(&mut command_type).await?;
 
