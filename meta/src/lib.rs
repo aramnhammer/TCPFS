@@ -50,17 +50,13 @@ pub async fn start_transaction(conn: &Connection) -> Result<Transaction> {
 pub async fn insert_metadata(
     tx: &Transaction,
     bucket_id: &str,
-    path: &PathBuf,
+    path: &str,
     size: u32,
 ) -> Result<()> {
-    let tbl = format!("INSERT INTO obj_{} ", bucket_id):
+    let tbl = format!("INSERT INTO obj_{} ", bucket_id);
     tx.execute(
-        &(tbl+"(bucket_id, path, size, last_modified) VALUES (?, ?, ?, ?)"),
-        (
-            bucket_id,
-            path.clone().into_os_string().into_string().unwrap(),
-            size,
-        ),
+        &(tbl + "(bucket_id, path, size, last_modified) VALUES (?, ?, ?, ?)"),
+        (bucket_id, path, size),
     )
     .await
     .unwrap();

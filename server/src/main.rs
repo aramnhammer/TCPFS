@@ -64,8 +64,10 @@ impl RequestHandler {
         let relative_path = String::from_utf8(relative_path_buf).expect("Invalid UTF-8 in path");
 
         let pb = PathBuf::new();
-        let destination = pb.join("/").join(bucket_id).join(relative_path);
-        let dest_str = destination.as_os_str();
+        let destination = pb
+            .join("/")
+            .join(bucket_id.clone())
+            .join(relative_path.clone());
         let dest_parent = destination.parent().unwrap();
         std::fs::create_dir_all(dest_parent).unwrap();
 
@@ -76,7 +78,7 @@ impl RequestHandler {
         let file = OpenOptions::new()
             .create(true) // Create the file if it doesn't exist
             .append(true) // Append to the file instead of overwriting
-            .open(destination)
+            .open(destination.clone())
             .await?;
         let mut file = file;
 
@@ -87,9 +89,15 @@ impl RequestHandler {
 
             // Read from the stream until a newline character ('\n') is found
             // This includes reading up to '\r\n' if present
-            let dest_path = 
             let bytes_read = reader.read_until(b'\n', &mut buffer).await?;
-            meta::insert_metadata(&trans, &bucket_id, dest_str.to_str().unwrap(), file_length);
+            meta::insert_metadata(
+                &trans,
+                bucket_id.as_str(),
+                destination.as_os_str().to_str().unwrap(),
+                file_length,
+            )
+            .await
+            .unwrap();
 
             if bytes_read == 0 {
                 // No more data; the connection was closed
