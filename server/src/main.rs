@@ -79,34 +79,34 @@ impl RequestHandler {
             0x01 => {
                 println!("UPLOAD command received");
                 // Call your upload handling function here
-                handle_upload(&mut stream).await?;
+                Self::handle_upload(stream).await?;
             }
             0x02 => {
                 println!("DOWNLOAD command received");
                 // Call your download handling function here
-                handle_download(&mut stream).await?;
+                //Self::handle_download(stream).await?;
             }
             0x03 => {
                 println!("DELETE command received");
                 // Call your delete handling function here
-                handle_delete(&mut stream).await?;
+                //handle_delete(&mut stream).await?;
             }
             0x04 => {
                 println!("LIST command received");
                 // Call your list handling function here
-                handle_list(&mut stream).await?;
+                //handle_list(&mut stream).await?;
             }
 
             0x05 => {
                 println!("CREATE BUCKET");
                 // Call your list handling function here
-                handle_bucket_create(&mut stream).await?;
+                Self::handle_bucket_create(stream).await?;
             }
 
             0x06 => {
-                println!("LIST command received");
+                println!("DELETE BUCKET");
                 // Call your list handling function here
-                handle_bucket_delete(&mut stream).await?;
+                //handle_bucket_delete(&mut stream).await?;
             }
             _ => {
                 println!("Unknown command received");
@@ -116,18 +116,19 @@ impl RequestHandler {
         Ok(())
     }
 
-    async fn handle_bucket_create(stream: TcpStream) {
+    async fn handle_bucket_create(mut stream: TcpStream) -> Result<()> {
         let bucket_id = uuid::Uuid::new_v4();
         let con = meta::get_connection().await.unwrap();
         meta::initialize_db(&con, &bucket_id.to_string())
             .await
             .unwrap();
         stream.write(bucket_id.as_bytes()).await.unwrap();
+        Ok(())
     }
 
     fn handle_download() {}
 
-    async fn handle_upload(mut stream: TcpStream) {
+    async fn handle_upload(mut stream: TcpStream) -> Result<()> {
         let mut path_length_buf = [0; 4];
         stream.read_exact(&mut path_length_buf).await?;
         let path_length = u32::from_be_bytes(path_length_buf);
@@ -209,6 +210,7 @@ impl RequestHandler {
             // Optionally, flush the file to ensure data is written to disk
             file.flush().await?;
         }
+        Ok(())
     }
     fn handle_delete() {}
     fn handle_list() {}
