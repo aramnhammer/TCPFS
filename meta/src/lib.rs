@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fmt::format, path::PathBuf};
 
 use libsql::{Builder, Connection, Result, Transaction};
 
@@ -28,7 +28,7 @@ pub async fn initialize_db(conn: &Connection, bucket_id: &String) -> Result<()> 
     let sql = format!(
         "CREATE TABLE IF NOT EXISTS obj_{} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            object_id TEXT NOT NULL UNIQUE,
+            bucket_id TEXT NOT NULL UNIQUE,
             path TEXT NOT NULL,
             size INTEGER
         )",
@@ -49,18 +49,17 @@ pub async fn start_transaction(conn: &Connection) -> Result<Transaction> {
 // Function to insert new metadata within a transaction
 pub async fn insert_metadata(
     tx: &Transaction,
-    object_id: &str,
+    bucket_id: &str,
     path: &PathBuf,
-    size: i64,
-    last_modified: &str,
+    size: u32,
 ) -> Result<()> {
+    let tbl = format!("INSERT INTO obj_{} ", bucket_id):
     tx.execute(
-        "INSERT INTO objects (object_id, path, size, last_modified) VALUES (?, ?, ?, ?)",
+        &(tbl+"(bucket_id, path, size, last_modified) VALUES (?, ?, ?, ?)"),
         (
-            object_id,
+            bucket_id,
             path.clone().into_os_string().into_string().unwrap(),
             size,
-            last_modified,
         ),
     )
     .await
@@ -68,9 +67,9 @@ pub async fn insert_metadata(
     Ok(())
 }
 
-// Function to retrieve metadata by object_id
+// Function to retrieve metadata by bucket_id
 pub async fn get_metadata(conn: &Connection, path: &str) -> Result<Option<(i64, String)>> {
-    let stmt = conn.prepare("SELECT size, last_modified FROM objects WHERE object_id = ?");
+    let stmt = conn.prepare("SELECT size, last_modified FROM objects WHERE bucket_id = ?");
     let mut rows = stmt.await.unwrap().query(&[path]).await.unwrap();
 
     if let Some(row) = rows.next().await.unwrap() {
@@ -82,8 +81,8 @@ pub async fn get_metadata(conn: &Connection, path: &str) -> Result<Option<(i64, 
     }
 }
 
-// Function to delete metadata by object_id within a transaction
-pub async fn delete_metadata(tx: &Transaction, object_id: &str) -> Result<(u64)> {
-    tx.execute("DELETE FROM objects WHERE object_id = ?", &[object_id])
+// Function to delete metadata by bucket_id within a transaction
+pub async fn delete_metadata(tx: &Transaction, bucket_id: &str) -> Result<(u64)> {
+    tx.execute("DELETE FROM objects WHERE bucket_id = ?", &[bucket_id])
         .await
 }
