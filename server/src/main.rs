@@ -11,6 +11,45 @@ use tokio::{
 };
 
 /*
+COMMAND TYPES:
+0x01 -> UPLOAD
+0x02 -> DOWNLOAD -> bytes
+0x03 -> DELETE -> u64 (bytes freed)
+0x04 -> LIST -> ARRAY[BUCKET_ID: UUID]
+0x05 -> CREATE BUCKET -> BUCKET_ID: UUID
+0x06 -> DELETE BUCKET -> u64 (bytes freed)
+*/
+
+/*
+CREATE BUCKET REQUEST:
+header:
++----------------------+
+|          0x05        |
++----------------------+
+
+CREATE BUCKET RESPONSE:
+----------------------+
+| bucket_id (128 bits)|
+----------------------+
+*/
+
+/*
+DOWNLOAD REQUEST:
+header:
++----------------------+--------------------+----------------------+
+|          0x02        | Path Length (4 byte)| bucket_id (128 bits)|
++----------------------+--------------------+----------------------+
++-----------------------------------------------------------------------------------------+
+|        Relative Path (variable length)                                                  |
++-----------------------------------------------------------------------------------------+
+DOWNLOAD RESPONSE:
++-----------------------------------------------------------------------------------------+
+|                              File Data (variable length)                                |
++-----------------------------------------------------------------------------------------+
+*/
+
+/*
+UPLOAD REQUEST:
 header:
 +----------------------+--------------------+----------------------+----------------------+
 | Command Type (1 byte)| Path Length (4 byte)| File Length (4 byte)| bucket_id (128 bits) |
@@ -29,10 +68,66 @@ struct RequestHandler;
 
 impl RequestHandler {
     async fn handle_client(mut stream: TcpStream) -> Result<()> {
-        
+        // Buffer to hold the command type
         let mut command_type = [0; 1];
+
+        // Read the first byte to determine the command type
         stream.read_exact(&mut command_type).await?;
 
+        // Match the command type and handle accordingly
+        match command_type[0] {
+            0x01 => {
+                println!("UPLOAD command received");
+                // Call your upload handling function here
+                handle_upload(&mut stream).await?;
+            }
+            0x02 => {
+                println!("DOWNLOAD command received");
+                // Call your download handling function here
+                handle_download(&mut stream).await?;
+            }
+            0x03 => {
+                println!("DELETE command received");
+                // Call your delete handling function here
+                handle_delete(&mut stream).await?;
+            }
+            0x04 => {
+                println!("LIST command received");
+                // Call your list handling function here
+                handle_list(&mut stream).await?;
+            }
+
+            0x05 => {
+                println!("CREATE BUCKET");
+                // Call your list handling function here
+                handle_bucket_create(&mut stream).await?;
+            }
+
+            0x06 => {
+                println!("LIST command received");
+                // Call your list handling function here
+                handle_bucket_delete(&mut stream).await?;
+            }
+            _ => {
+                println!("Unknown command received");
+                // Handle unknown commands here, possibly returning an error or ignoring
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_bucket_create(stream: TcpStream) {
+        let bucket_id = uuid::Uuid::new_v4();
+        let con = meta::get_connection().await.unwrap();
+        meta::initialize_db(&con, &bucket_id.to_string())
+            .await
+            .unwrap();
+        stream.write(bucket_id.as_bytes()).await.unwrap();
+    }
+
+    fn handle_download() {}
+
+    async fn handle_upload(mut stream: TcpStream) {
         let mut path_length_buf = [0; 4];
         stream.read_exact(&mut path_length_buf).await?;
         let path_length = u32::from_be_bytes(path_length_buf);
@@ -40,6 +135,8 @@ impl RequestHandler {
         let mut file_length_buf = [0; 4];
         stream.read_exact(&mut file_length_buf).await?;
         let file_length = u32::from_be_bytes(file_length_buf);
+
+        // FIXME: Lots of allocs happening here, probably could be done better
 
         let mut bucket_id_buf = [0; 16];
         stream.read_exact(&mut bucket_id_buf).await?;
@@ -112,11 +209,7 @@ impl RequestHandler {
             // Optionally, flush the file to ensure data is written to disk
             file.flush().await?;
         }
-
-        Ok(())
     }
-    fn handle_download() {}
-    fn handle_upload() {}
     fn handle_delete() {}
     fn handle_list() {}
 }
