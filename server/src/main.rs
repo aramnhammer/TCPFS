@@ -65,6 +65,7 @@ impl RequestHandler {
 
         let pb = PathBuf::new();
         let destination = pb.join("/").join(bucket_id).join(relative_path);
+        let dest_str = destination.as_os_str();
         let dest_parent = destination.parent().unwrap();
         std::fs::create_dir_all(dest_parent).unwrap();
 
@@ -86,7 +87,9 @@ impl RequestHandler {
 
             // Read from the stream until a newline character ('\n') is found
             // This includes reading up to '\r\n' if present
+            let dest_path = 
             let bytes_read = reader.read_until(b'\n', &mut buffer).await?;
+            meta::insert_metadata(&trans, &bucket_id, dest_str.to_str().unwrap(), file_length);
 
             if bytes_read == 0 {
                 // No more data; the connection was closed
