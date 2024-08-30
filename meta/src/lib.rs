@@ -1,29 +1,35 @@
-use std::{fmt::format, path::PathBuf};
+use std::{
+    fmt::{self, format},
+    path::PathBuf,
+};
 
-use libsql::{Builder, Connection, Result, Transaction};
+use rusqlite::{Connection, Result, Transaction};
+
+// FIXME: Build a common error thing
+type MetaError<T> = std::result::Result<T, MissUse>;
+
+#[derive(Debug, Clone)]
+struct MissUse;
+
+impl fmt::Display for MissUse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Metadata creation missuse")
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {}
+    fn test_connect() {}
 }
 
-pub async fn get_connection() -> Result<Connection> {
-    let db = Builder::new_local(":memory:").build().await.unwrap();
-    return db.connect();
+pub fn get_connection() -> Result<Connection> {
+    return Connection::open_in_memory();
 }
 
-// Function to initialize the database and create necessary tables
-pub async fn initialize_db(conn: &Connection, bucket_id: &String) -> Result<()> {
-    // Validate bucket_id to prevent SQL injection
-    if !bucket_id.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        return Err(libsql::Error::Misuse(
-            "Bucket name must be alphanumeric".to_string(),
-        ));
-    }
-
+pub fn init_db(conn: &Connection, bucket_id: &String) -> Result<()> {
     // Construct the SQL statement with the table name
     let sql = format!(
         "CREATE TABLE IF NOT EXISTS obj_{} (
@@ -34,20 +40,16 @@ pub async fn initialize_db(conn: &Connection, bucket_id: &String) -> Result<()> 
         )",
         bucket_id
     );
-
-    // Execute the SQL statement
-    conn.execute(&sql, ()).await.unwrap();
-
+    let _ = conn.execute(&sql, ());
     Ok(())
 }
 
-// Function to start a transaction and return a Transaction object
-pub async fn start_transaction(conn: &Connection) -> Result<Transaction> {
-    Ok(conn.transaction().await.unwrap())
+pub fn start_transaction(conn: &mut Connection) -> Transaction {
+    return conn.transaction().unwrap();
 }
 
 // Function to insert new metadata within a transaction
-pub async fn insert_metadata(
+pub fn insert_metadata(
     tx: &Transaction,
     bucket_id: &str,
     path: &str,
@@ -58,17 +60,16 @@ pub async fn insert_metadata(
         &(tbl + "(bucket_id, path, size, last_modified) VALUES (?, ?, ?, ?)"),
         (bucket_id, path, size),
     )
-    .await
     .unwrap();
     Ok(())
 }
 
-// Function to retrieve metadata by bucket_id
-pub async fn get_metadata(conn: &Connection, path: &str) -> Result<Option<(i64, String)>> {
+pub fn get_metadata(conn: &Connection, path: &str) -> Result<Option<(i64, String)>> {
     let stmt = conn.prepare("SELECT size, last_modified FROM objects WHERE bucket_id = ?");
-    let mut rows = stmt.await.unwrap().query(&[path]).await.unwrap();
+    let mut binding = stmt.unwrap();
+    let mut rows = binding.query(&[path]).unwrap();
 
-    if let Some(row) = rows.next().await.unwrap() {
+    if let Some(row) = rows.next().unwrap() {
         let size: i64 = row.get(0)?;
         let last_modified: String = row.get(1)?;
         Ok(Some((size, last_modified)))
@@ -77,8 +78,6 @@ pub async fn get_metadata(conn: &Connection, path: &str) -> Result<Option<(i64, 
     }
 }
 
-// Function to delete metadata by bucket_id within a transaction
-pub async fn delete_metadata(tx: &Transaction, bucket_id: &str) -> Result<(u64)> {
+pub fn delete_metadata(tx: &Transaction, bucket_id: &str) -> Result<usize> {
     tx.execute("DELETE FROM objects WHERE bucket_id = ?", &[bucket_id])
-        .await
 }
