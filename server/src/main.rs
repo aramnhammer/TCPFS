@@ -1,14 +1,17 @@
 use std::{
+    fs::OpenOptions,
+    io::{BufRead, BufReader, Read, Write},
+    net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
-    thread::sleep,
+    thread::{sleep, spawn},
     time::Duration,
 };
-use tokio::{
-    fs::{self, File, OpenOptions},
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, Result},
-    join,
-    net::{TcpListener, TcpStream},
-};
+// use tokio::{
+//     fs::{self, File, OpenOptions},
+//     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, Result},
+//     join,
+//     net::{TcpListener, TcpStream},
+// };
 
 /*
 COMMAND TYPES:
@@ -67,19 +70,19 @@ data:
 struct RequestHandler;
 
 impl RequestHandler {
-    async fn handle_client(mut stream: TcpStream) -> Result<()> {
+    fn handle_client(mut stream: TcpStream) -> Result<()> {
         // Buffer to hold the command type
         let mut command_type = [0; 1];
 
         // Read the first byte to determine the command type
-        stream.read_exact(&mut command_type).await?;
+        stream.read_exact(&mut command_type)?;
 
         // Match the command type and handle accordingly
         match command_type[0] {
             0x01 => {
                 println!("UPLOAD command received");
                 // Call your upload handling function here
-                Self::handle_upload(stream).await?;
+                Self::handle_upload(stream)?;
             }
             0x02 => {
                 println!("DOWNLOAD command received");
@@ -118,36 +121,34 @@ impl RequestHandler {
 
     async fn handle_bucket_create(mut stream: TcpStream) -> Result<()> {
         let bucket_id = uuid::Uuid::new_v4();
-        let con = meta::get_connection().await.unwrap();
-        meta::initialize_db(&con, &bucket_id.to_string())
-            .await
-            .unwrap();
+        let con = meta::get_connection().unwrap();
+        meta::init_db(&con, &bucket_id.to_string()).unwrap();
         stream.write(bucket_id.as_bytes()).await.unwrap();
         Ok(())
     }
 
     fn handle_download() {}
 
-    async fn handle_upload(mut stream: TcpStream) -> Result<()> {
+    fn handle_upload(mut stream: TcpStream) -> Result<()> {
         let mut path_length_buf = [0; 4];
-        stream.read_exact(&mut path_length_buf).await?;
+        stream.read_exact(&mut path_length_buf)?;
         let path_length = u32::from_be_bytes(path_length_buf);
 
         let mut file_length_buf = [0; 4];
-        stream.read_exact(&mut file_length_buf).await?;
+        stream.read_exact(&mut file_length_buf)?;
         let file_length = u32::from_be_bytes(file_length_buf);
 
         // FIXME: Lots of allocs happening here, probably could be done better
 
         let mut bucket_id_buf = [0; 16];
-        stream.read_exact(&mut bucket_id_buf).await?;
+        stream.read_exact(&mut bucket_id_buf)?;
         let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
-        let con = meta::get_connection().await.unwrap();
-        meta::initialize_db(&con, &bucket_id).await.unwrap();
-        let trans = meta::start_transaction(&con).await.unwrap();
+        let mut con = meta::get_connection().unwrap();
+        meta::init_db(&con, &bucket_id).unwrap();
+        let trans = meta::start_transaction(&mut con);
 
         let mut relative_path_buf = vec![0; path_length as usize];
-        stream.read_exact(&mut relative_path_buf).await?;
+        stream.read_exact(&mut relative_path_buf)?;
         let relative_path = String::from_utf8(relative_path_buf).expect("Invalid UTF-8 in path");
 
         let pb = PathBuf::new();
@@ -162,12 +163,11 @@ impl RequestHandler {
         let mut reader = BufReader::new(stream);
 
         // Open (or create) the output file in append mode
-        let file = OpenOptions::new()
+        let mut file = OpenOptions::new()
             .create(true) // Create the file if it doesn't exist
             .append(true) // Append to the file instead of overwriting
             .open(destination.clone())
-            .await?;
-        let mut file = file;
+            .unwrap();
 
         // Buffer to store each received message
         let mut buffer = Vec::new();
@@ -176,14 +176,13 @@ impl RequestHandler {
 
             // Read from the stream until a newline character ('\n') is found
             // This includes reading up to '\r\n' if present
-            let bytes_read = reader.read_until(b'\n', &mut buffer).await?;
+            let bytes_read = reader.read_until(b'\n', &mut buffer);
             meta::insert_metadata(
                 &trans,
                 bucket_id.as_str(),
                 destination.as_os_str().to_str().unwrap(),
                 file_length,
             )
-            .await
             .unwrap();
 
             if bytes_read == 0 {
@@ -204,11 +203,11 @@ impl RequestHandler {
             // println!("Received message: {}", message);
 
             // Write the buffer to the file, followed by a newline for separation
-            file.write_all(&buffer).await?;
-            file.write_all(b"\n").await?; // Adds a newline in the file
+            file.write_all(&buffer)?;
+            file.write_all(b"\n")?; // Adds a newline in the file
 
             // Optionally, flush the file to ensure data is written to disk
-            file.flush().await?;
+            file.flush()?;
         }
         Ok(())
     }
@@ -216,17 +215,15 @@ impl RequestHandler {
     fn handle_list() {}
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:8080").await?;
+fn main() -> Result<()> {
+    let listener = TcpListener::bind("0.0.0.0:8080")?;
     println!("Server listening on port 8080");
 
     // let work_dir = meta::initialize_db(con, bucket_id)
-
     loop {
-        let (stream, _) = listener.accept().await?;
-        tokio::spawn(async move {
-            if let Err(e) = RequestHandler::handle_client(stream).await {
+        let (stream, _) = listener.accept()?;
+        std::thread::spawn(move || {
+            if let Err(e) = RequestHandler::handle_client(stream) {
                 eprintln!("Error handling client: {:?}", e);
             }
         });

@@ -49,12 +49,7 @@ pub fn start_transaction(conn: &mut Connection) -> Transaction {
 }
 
 // Function to insert new metadata within a transaction
-pub fn insert_metadata(
-    tx: &Transaction,
-    bucket_id: &str,
-    path: &str,
-    size: u32,
-) -> Result<()> {
+pub fn insert_metadata(tx: &Transaction, bucket_id: &str, path: &str, size: u32) -> Result<()> {
     let tbl = format!("INSERT INTO obj_{} ", bucket_id);
     tx.execute(
         &(tbl + "(bucket_id, path, size, last_modified) VALUES (?, ?, ?, ?)"),
