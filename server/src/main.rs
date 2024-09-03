@@ -7,8 +7,7 @@ use std::{
     thread::{sleep, spawn},
     time::Duration,
 };
-use uuid::{self, Uuid::new_v4
-};
+
 // use tokio::{
 //     fs::{self, File, OpenOptions},
 //     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, Result},
@@ -73,7 +72,7 @@ data:
 struct RequestHandler;
 
 impl RequestHandler {
-    fn handle_client(mut stream: TcpStream) -> Result<()> {
+    fn handle_client(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
         // Buffer to hold the command type
         let mut command_type = [0; 1];
 
@@ -123,7 +122,7 @@ impl RequestHandler {
     }
 
     fn handle_bucket_create(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
-        let bucket_id = new_v4();
+        let bucket_id = uuid::Uuid::new_v4();
         let con = meta::get_connection().unwrap();
         meta::init_db(&con, &bucket_id.to_string()).unwrap();
         stream.write(bucket_id.as_bytes()).unwrap();
