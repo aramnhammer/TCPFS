@@ -1,10 +1,13 @@
 use std::{
+    error::Error,
     fs::OpenOptions,
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     thread::{sleep, spawn},
     time::Duration,
+};
+use uuid::{self, Uuid::new_v4
 };
 // use tokio::{
 //     fs::{self, File, OpenOptions},
@@ -103,7 +106,7 @@ impl RequestHandler {
             0x05 => {
                 println!("CREATE BUCKET");
                 // Call your list handling function here
-                Self::handle_bucket_create(stream).await?;
+                Self::handle_bucket_create(stream);
             }
 
             0x06 => {
@@ -119,17 +122,17 @@ impl RequestHandler {
         Ok(())
     }
 
-    async fn handle_bucket_create(mut stream: TcpStream) -> Result<()> {
-        let bucket_id = uuid::Uuid::new_v4();
+    fn handle_bucket_create(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
+        let bucket_id = new_v4();
         let con = meta::get_connection().unwrap();
         meta::init_db(&con, &bucket_id.to_string()).unwrap();
-        stream.write(bucket_id.as_bytes()).await.unwrap();
+        stream.write(bucket_id.as_bytes()).unwrap();
         Ok(())
     }
 
     fn handle_download() {}
 
-    fn handle_upload(mut stream: TcpStream) -> Result<()> {
+    fn handle_upload(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
         let mut path_length_buf = [0; 4];
         stream.read_exact(&mut path_length_buf)?;
         let path_length = u32::from_be_bytes(path_length_buf);
@@ -176,7 +179,7 @@ impl RequestHandler {
 
             // Read from the stream until a newline character ('\n') is found
             // This includes reading up to '\r\n' if present
-            let bytes_read = reader.read_until(b'\n', &mut buffer);
+            let bytes_read = reader.read_until(b'\n', &mut buffer).unwrap();
             meta::insert_metadata(
                 &trans,
                 bucket_id.as_str(),
@@ -215,7 +218,7 @@ impl RequestHandler {
     fn handle_list() {}
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind("0.0.0.0:8080")?;
     println!("Server listening on port 8080");
 
