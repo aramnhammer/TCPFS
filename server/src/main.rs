@@ -167,7 +167,7 @@ impl RequestHandler {
                 &trans,
                 bucket_id.as_str(),
                 destination.as_os_str().to_str().unwrap(),
-                file_length,
+                &file_length.to_string(),
             )
             .unwrap();
 
@@ -190,10 +190,9 @@ impl RequestHandler {
 
             // Write the buffer to the file, followed by a newline for separation
             file.write_all(&buffer)?;
-            file.write_all(b"\n")?; // Adds a newline in the file
 
-            // Optionally, flush the file to ensure data is written to disk
-            file.flush()?;
+            // // Optionally, flush the file to ensure data is written to disk
+            // file.flush()?;
         }
         Ok(())
     }
