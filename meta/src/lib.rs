@@ -103,14 +103,18 @@ mod tests {
 }
 
 pub fn get_connection() -> Result<Connection> {
-    return Connection::open_in_memory();
+    let con = Connection::open_in_memory().unwrap();
+    init_db(&con).unwrap();
+    return Ok(con);
 }
 
 pub fn init_db(conn: &Connection) -> Result<()> {
+    // Enable WAL mode
+    conn.pragma_update(None, "journal_mode", &"WAL")?;
     // create object table
     conn.execute(
         " -- reference table for buckets (root dirs, and their metadata)
-    CREATE TABLE buckets (
+    CREATE TABLE IF NOT EXISTS buckets (
     bucket_id TEXT PRIMARY KEY,   -- UUID of the top-level folder
     total_size INTEGER DEFAULT 0
     );
@@ -121,7 +125,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
 
     conn.execute(
         " -- reference table for objects on disk
-    CREATE TABLE objects (
+    CREATE TABLE IF NOT EXISTS objects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     bucket_id TEXT NOT NULL,
     path TEXT,
@@ -136,7 +140,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     .unwrap();
 
     conn.execute("-- Trigger to update the total size when a file reference is inserted, handle case if bucket does not exists (no other files there)
-    CREATE TRIGGER update_total_size_after_insert
+    CREATE TRIGGER IF NOT EXISTS update_total_size_after_insert
     AFTER INSERT ON objects 
     FOR EACH ROW
     BEGIN
@@ -150,7 +154,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
 
     conn.execute(
         "-- Trigger to update the total size when a file reference is updated
-    CREATE TRIGGER update_total_size_after_update
+    CREATE TRIGGER IF NOT EXISTS update_total_size_after_update
     AFTER UPDATE OF file_size ON objects 
     FOR EACH ROW
     BEGIN
@@ -165,7 +169,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
 
     conn.execute(
         "-- Trigger to update the total size when a file reference is deleted
-    CREATE TRIGGER update_total_size_after_delete
+    CREATE TRIGGER IF NOT EXISTS update_total_size_after_delete
     AFTER DELETE ON objects 
     FOR EACH ROW
     BEGIN

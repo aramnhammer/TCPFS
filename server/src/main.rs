@@ -17,11 +17,10 @@ use std::{
 
 /*
 COMMAND TYPES:
-0x01 -> UPLOAD
+0x01 -> UPLOAD | this will create a 'bucket' automatically |
 0x02 -> DOWNLOAD -> bytes
 0x03 -> DELETE -> u64 (bytes freed)
 0x04 -> LIST -> ARRAY[BUCKET_ID: UUID]
-0x05 -> CREATE BUCKET -> BUCKET_ID: UUID
 0x06 -> DELETE BUCKET -> u64 (bytes freed)
 */
 
@@ -103,12 +102,6 @@ impl RequestHandler {
             }
 
             0x05 => {
-                println!("CREATE BUCKET");
-                // Call your list handling function here
-                Self::handle_bucket_create(stream);
-            }
-
-            0x06 => {
                 println!("DELETE BUCKET");
                 // Call your list handling function here
                 //handle_bucket_delete(&mut stream).await?;
@@ -118,14 +111,6 @@ impl RequestHandler {
                 // Handle unknown commands here, possibly returning an error or ignoring
             }
         }
-        Ok(())
-    }
-
-    fn handle_bucket_create(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
-        let bucket_id = uuid::Uuid::new_v4();
-        let con = meta::get_connection().unwrap();
-        meta::init_db(&con, &bucket_id.to_string()).unwrap();
-        stream.write(bucket_id.as_bytes()).unwrap();
         Ok(())
     }
 
@@ -141,12 +126,11 @@ impl RequestHandler {
         let file_length = u32::from_be_bytes(file_length_buf);
 
         // FIXME: Lots of allocs happening here, probably could be done better
-
         let mut bucket_id_buf = [0; 16];
         stream.read_exact(&mut bucket_id_buf)?;
         let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
+
         let mut con = meta::get_connection().unwrap();
-        meta::init_db(&con, &bucket_id).unwrap();
         let trans = meta::start_transaction(&mut con);
 
         let mut relative_path_buf = vec![0; path_length as usize];
