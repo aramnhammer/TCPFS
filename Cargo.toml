@@ -1,5 +1,6 @@
 [workspace]
 members = [ 
-    "meta",
-    "server"
-]
+    "meta-sqlite",
+    "server",
+    "app"
+    ]
