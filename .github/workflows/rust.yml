@@ -17,6 +17,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build meta
-      run: cargo build --package meta --verbose
+      run: cargo build --package meta-sqlite --verbose
     - name: Test meta
-      run: cargo test --package meta --verbose
+      run: cargo test --package meta-sqlite --verbose
