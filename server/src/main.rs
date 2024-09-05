@@ -7,6 +7,7 @@ use std::{
     thread::{sleep, spawn},
     time::Duration,
 };
+use meta_sqlite;
 
 // use tokio::{
 //     fs::{self, File, OpenOptions},
@@ -22,19 +23,6 @@ COMMAND TYPES:
 0x03 -> DELETE -> u64 (bytes freed)
 0x04 -> LIST -> ARRAY[BUCKET_ID: UUID]
 0x06 -> DELETE BUCKET -> u64 (bytes freed)
-*/
-
-/*
-CREATE BUCKET REQUEST:
-header:
-+----------------------+
-|          0x05        |
-+----------------------+
-
-CREATE BUCKET RESPONSE:
-----------------------+
-| bucket_id (128 bits)|
-----------------------+
 */
 
 /*
@@ -130,8 +118,8 @@ impl RequestHandler {
         stream.read_exact(&mut bucket_id_buf)?;
         let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
 
-        let mut con = meta::get_connection().unwrap();
-        let trans = meta::start_transaction(&mut con);
+        let mut con = meta_sqlite::get_connection().unwrap();
+        let trans = meta_sqlite::start_transaction(&mut con);
 
         let mut relative_path_buf = vec![0; path_length as usize];
         stream.read_exact(&mut relative_path_buf)?;
@@ -163,7 +151,7 @@ impl RequestHandler {
             // Read from the stream until a newline character ('\n') is found
             // This includes reading up to '\r\n' if present
             let bytes_read = reader.read_until(b'\n', &mut buffer).unwrap();
-            meta::insert_metadata(
+            meta_sqlite::insert_metadata(
                 &trans,
                 bucket_id.as_str(),
                 destination.as_os_str().to_str().unwrap(),
@@ -204,7 +192,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let listener = TcpListener::bind("0.0.0.0:8080")?;
     println!("Server listening on port 8080");
 
-    // let work_dir = meta::initialize_db(con, bucket_id)
+    // let work_dir = meta_sqlite::initialize_db(con, bucket_id)
     loop {
         let (stream, _) = listener.accept()?;
         std::thread::spawn(move || {
