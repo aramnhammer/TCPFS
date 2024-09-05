@@ -1,4 +1,6 @@
+use meta_sqlite;
 use std::{
+    env,
     error::Error,
     fs::OpenOptions,
     io::{BufRead, BufReader, Read, Write},
@@ -7,14 +9,6 @@ use std::{
     thread::{sleep, spawn},
     time::Duration,
 };
-use meta_sqlite;
-
-// use tokio::{
-//     fs::{self, File, OpenOptions},
-//     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, Result},
-//     join,
-//     net::{TcpListener, TcpStream},
-// };
 
 /*
 COMMAND TYPES:
@@ -59,7 +53,11 @@ data:
 struct RequestHandler;
 
 impl RequestHandler {
-    fn handle_client(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
+    fn handle_client(
+        mut stream: TcpStream,
+        db_path: Option<&String>,
+        working_dir: &String,
+    ) -> Result<(), Box<dyn Error>> {
         // Buffer to hold the command type
         let mut command_type = [0; 1];
 
@@ -71,7 +69,7 @@ impl RequestHandler {
             0x01 => {
                 println!("UPLOAD command received");
                 // Call your upload handling function here
-                Self::handle_upload(stream)?;
+                Self::handle_upload(stream, db_path, working_dir)?;
             }
             0x02 => {
                 println!("DOWNLOAD command received");
@@ -104,7 +102,11 @@ impl RequestHandler {
 
     fn handle_download() {}
 
-    fn handle_upload(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
+    fn handle_upload(
+        mut stream: TcpStream,
+        db_path: Option<&String>,
+        working_dir: &String,
+    ) -> Result<(), Box<dyn Error>> {
         let mut path_length_buf = [0; 4];
         stream.read_exact(&mut path_length_buf)?;
         let path_length = u32::from_be_bytes(path_length_buf);
@@ -118,7 +120,7 @@ impl RequestHandler {
         stream.read_exact(&mut bucket_id_buf)?;
         let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
 
-        let mut con = meta_sqlite::get_connection().unwrap();
+        let mut con = meta_sqlite::get_connection(db_path.cloned()).unwrap();
         let trans = meta_sqlite::start_transaction(&mut con);
 
         let mut relative_path_buf = vec![0; path_length as usize];
@@ -189,14 +191,21 @@ impl RequestHandler {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let listener = TcpListener::bind("0.0.0.0:8080")?;
-    println!("Server listening on port 8080");
+    let args: Vec<String> = env::args().collect();
+    let host = args[1].clone();
+    let port = args[2].clone();
+    let db_path = Some(args[3].clone());
+    let working_dir = args[4].clone();
+    let addr = format!("{}:{}", host, port);
+    let listener = TcpListener::bind(addr.clone())?;
+    println!("Server listening on port {addr}, workdir: {working_dir}");
 
-    // let work_dir = meta_sqlite::initialize_db(con, bucket_id)
     loop {
         let (stream, _) = listener.accept()?;
+        let db_path = db_path.clone();
+        let working_dir = working_dir.clone();
         std::thread::spawn(move || {
-            if let Err(e) = RequestHandler::handle_client(stream) {
+            if let Err(e) = RequestHandler::handle_client(stream, db_path.as_ref(), &working_dir) {
                 eprintln!("Error handling client: {:?}", e);
             }
         });
