@@ -1,6 +1,6 @@
 use std::{
     fmt::{self, format},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use rusqlite::{params, Connection, Error, Result, Transaction};
@@ -102,10 +102,14 @@ mod tests {
     }
 }
 
-pub fn get_connection() -> Result<Connection> {
-    let con = Connection::open_in_memory().unwrap();
-    init_db(&con).unwrap();
-    return Ok(con);
+pub fn get_connection(db_path: Option<String>) -> Result<Connection> {
+    let con = match db_path {
+        Some(x) => Connection::open(x)?,
+        None => Connection::open_in_memory()?,
+    };
+
+    init_db(&con)?;
+    Ok(con)
 }
 
 pub fn init_db(conn: &Connection) -> Result<()> {
