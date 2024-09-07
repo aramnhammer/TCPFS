@@ -25,3 +25,4 @@ Cargo.lock
 
 # jetbrains
 .idea/
+~/.tcpfs-client/storage.db
