@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use rusqlite::{self, params, Connection};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Host {
     pub id: Option<i32>, // This will be None when inserting a new host
     pub host: Option<String>,
