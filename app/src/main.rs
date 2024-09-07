@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 #![allow(rustdoc::missing_crate_level_docs)] // it's an example
 
+use std::borrow::Borrow;
+
 use eframe::egui;
 use egui::{CentralPanel, Context};
 use egui_extras::{Column, TableBuilder};
@@ -82,9 +84,13 @@ impl eframe::App for App {
                     .unwrap_or(&String::new())
             ));
             TableBuilder::new(ui)
-                .column(Column::auto().resizable(false))
-                .column(Column::remainder())
+                .column(Column::auto())
+                .column(Column::auto())
+                .column(Column::auto())
                 .header(10.0, |mut header| {
+                    header.col(|ui| {
+                        ui.heading("Bucket");
+                    });
                     header.col(|ui| {
                         ui.heading("Host");
                     });
@@ -94,16 +100,19 @@ impl eframe::App for App {
                 })
                 .body(|mut body| {
                     let saved_hosts = storage::get_all_hosts(&self.con).unwrap();
-                    for h in saved_hosts.into_iter() {
+                    for h in saved_hosts.iter() {
+                        let hh = h.clone();
                         body.row(10.0, |mut row| {
                             row.col(|ui| {
-                                ui.label(h.bucket_id.unwrap_or_default());
+                                if ui.label(hh.bucket_id.unwrap_or_default()).clicked() {
+                                    self.selected_host = hh.clone();
+                                };
                             });
                             row.col(|ui| {
-                                ui.label(h.host.unwrap_or_default());
+                                ui.label(hh.host.unwrap_or_default());
                             });
                             row.col(|ui| {
-                                ui.label(h.port.unwrap_or_default());
+                                ui.label(hh.port.unwrap_or_default());
                             });
                         });
                     }
