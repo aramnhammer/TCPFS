@@ -28,4 +28,4 @@ Cargo.lock
 ~/.tcpfs-client/storage.db
 
 # .db files
-*.db
+*.db*
