@@ -1,8 +1,8 @@
 use meta_sqlite;
 use std::{
-    env,
+    default, env,
     error::Error,
-    fs::OpenOptions,
+    fs::{self, OpenOptions},
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
@@ -129,61 +129,26 @@ impl RequestHandler {
 
         let pb = PathBuf::new();
         let destination = pb
-            .join("/")
+            .join(working_dir)
             .join(bucket_id.clone())
             .join(relative_path.clone());
         let dest_parent = destination.parent().unwrap();
         std::fs::create_dir_all(dest_parent).unwrap();
+        meta_sqlite::insert_metadata(
+            &trans,
+            bucket_id.as_str(),
+            destination.as_os_str().to_str().unwrap(),
+            &file_length.to_string(),
+        )?;
 
-        // Wrap the stream in a BufReader for efficient buffered reading
-        let mut reader = BufReader::new(stream);
+        // Open the destination file for writing
+        let mut file = fs::File::create(destination)?;
 
-        // Open (or create) the output file in append mode
-        let mut file = OpenOptions::new()
-            .create(true) // Create the file if it doesn't exist
-            .append(true) // Append to the file instead of overwriting
-            .open(destination.clone())
-            .unwrap();
+        // Copy the bytes from the limited stream to the file
+        std::io::copy(&mut stream.take(file_length.into()), &mut file)?;
+        trans.commit()?;
 
         // Buffer to store each received message
-        let mut buffer = Vec::new();
-        loop {
-            buffer.clear(); // Clear the buffer before each read
-
-            // Read from the stream until a newline character ('\n') is found
-            // This includes reading up to '\r\n' if present
-            let bytes_read = reader.read_until(b'\n', &mut buffer).unwrap();
-            meta_sqlite::insert_metadata(
-                &trans,
-                bucket_id.as_str(),
-                destination.as_os_str().to_str().unwrap(),
-                &file_length.to_string(),
-            )
-            .unwrap();
-
-            if bytes_read == 0 {
-                // No more data; the connection was closed
-                println!("Connection closed by the peer");
-                break;
-            }
-
-            // Check and remove the '\r\n' delimiter if present
-            if buffer.ends_with(b"\r\n") {
-                buffer.truncate(buffer.len() - 2); // Remove '\r\n'
-            } else if buffer.ends_with(b"\n") {
-                buffer.truncate(buffer.len() - 1); // Remove '\n'
-            }
-
-            // Optionally, convert the buffer to a String for processing
-            // let message = String::from_utf8_lossy(&buffer);
-            // println!("Received message: {}", message);
-
-            // Write the buffer to the file, followed by a newline for separation
-            file.write_all(&buffer)?;
-
-            // // Optionally, flush the file to ensure data is written to disk
-            // file.flush()?;
-        }
         Ok(())
     }
     fn handle_delete() {}
@@ -192,31 +157,32 @@ impl RequestHandler {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
-    let host: String = match args[1].is_empty() {
-        true => "127.0.0.1".to_string(),
-        false => args[1].clone(),
-    };
-    let port: String = match args[2].is_empty() {
-        true => "8888".to_string(),
-        false => args[2].clone(),
-    };
+    let default_host = "127.0.01".to_string();
+    let defualt_port = "8888".to_string();
 
-    let db_path: String = match args[3].is_empty() {
-        true => env::current_dir().unwrap().to_string_lossy().to_string(),
-        false => args[3].clone(),
-    };
+    let host = args.get(1).unwrap_or(&default_host);
+    let port = args.get(2).unwrap_or(&defualt_port);
 
-    let working_dir: PathBuf = match args[4].is_empty() {
-        true => env::current_dir().unwrap().join("metadata.db"),
-        false => PathBuf::from(args[3].clone()).join("metadata.db"),
-    };
+    let default_db_path = env::current_dir()
+        .unwrap()
+        .join("metadata.db")
+        .to_string_lossy()
+        .to_string();
+    let db_path = args.get(3).unwrap_or(&default_db_path);
+
+    let default_working_dir = env::current_dir()
+        .unwrap()
+        .join("file_store")
+        .to_string_lossy()
+        .to_string();
+    let working_dir: PathBuf = PathBuf::from(args.get(4).unwrap_or(&default_working_dir));
 
     let addr = format!("{}:{}", host, port);
     let listener = TcpListener::bind(addr.clone())?;
 
     println!("Server listening on port {addr}");
 
-    // FIXME: get con initializes the db, when inevitably we re-work the db connection stuff (maybe with a MVCC DB) 
+    // FIXME: get con initializes the db, when inevitably we re-work the db connection stuff (maybe with a MVCC DB)
     // we should refactor this to be clearer
     let _ = meta_sqlite::get_connection(Some(db_path.clone()));
 
