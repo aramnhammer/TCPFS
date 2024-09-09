@@ -1,9 +1,9 @@
 use std::{
     fmt::{self, format},
-    path::{Path, PathBuf},
+    path::{self, Path, PathBuf},
 };
 
-use rusqlite::{params, Connection, Error, Result, Transaction};
+use rusqlite::{params, Connection, Error, Result, Rows, Transaction};
 // FIXME: Build a common error thing
 
 #[cfg(test)]
@@ -213,4 +213,60 @@ pub fn insert_metadata(
             &[bucket_id, path, size],
         )
         .unwrap())
+}
+
+#[derive(Debug)]
+pub struct Object {
+    pub is_dir: u8,          // will default to true, the updated before sent to the client
+    pub path: String,        // Path of the file or directory
+    pub bucket_id: [u8; 16], // 128-bit bucket ID (16 bytes)
+    pub size: u32,           // File or directory size (32-bit)
+}
+
+impl Object {
+    // Function to serialize the object to the specified binary format
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut result = Vec::new();
+
+        // 1 byte: 0 for file, 1 for directory
+        result.extend_from_slice(&self.is_dir.to_be_bytes());
+
+        // Path length (32-bit, big-endian)
+        let path_len = self.path.len() as u32;
+        result.extend_from_slice(&path_len.to_be_bytes());
+
+        // 128-bit bucket ID
+        result.extend_from_slice(&self.bucket_id);
+
+        // File/dir size (32-bit, big-endian)
+        result.extend_from_slice(&self.size.to_be_bytes());
+
+        // Path bytes
+        result.extend_from_slice(self.path.as_bytes());
+
+        // Separator "\r\n"
+        result.extend_from_slice(b"\r\n");
+
+        result
+    }
+}
+
+pub fn get_by_bucket_and_relative_path(
+    con: &Connection,
+    bucket_id: &str,
+    path: &str,
+) -> Result<Vec<Object>> {
+    let mut stmt =
+        con.prepare("SELECT id, bucket_id, path FROM objects WHERE bucket_id=? AND path LIKE ?")?;
+    let object_iter = stmt.query_map(params![bucket_id, format!("{}%", path)], |row| {
+        Ok(Object {
+            is_dir: 0,
+            bucket_id: row.get(1)?,
+            path: row.get(2)?,
+            size: row.get(3)?,
+        })
+    })?;
+
+    let objects: Result<Vec<Object>> = object_iter.collect();
+    objects
 }
