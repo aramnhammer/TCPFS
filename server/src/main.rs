@@ -56,7 +56,7 @@ impl RequestHandler {
     fn handle_client(
         mut stream: TcpStream,
         db_path: Option<&String>,
-        working_dir: &String,
+        working_dir: &PathBuf,
     ) -> Result<(), Box<dyn Error>> {
         // Buffer to hold the command type
         let mut command_type = [0; 1];
@@ -105,7 +105,7 @@ impl RequestHandler {
     fn handle_upload(
         mut stream: TcpStream,
         db_path: Option<&String>,
-        working_dir: &String,
+        working_dir: &PathBuf,
     ) -> Result<(), Box<dyn Error>> {
         let mut path_length_buf = [0; 4];
         stream.read_exact(&mut path_length_buf)?;
@@ -192,20 +192,38 @@ impl RequestHandler {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
-    let host = args[1].clone();
-    let port = args[2].clone();
-    let db_path = Some(args[3].clone());
-    let working_dir = args[4].clone();
+    let host: String = match args[1].is_empty() {
+        true => "127.0.0.1".to_string(),
+        false => args[1].clone(),
+    };
+    let port: String = match args[2].is_empty() {
+        true => "8888".to_string(),
+        false => args[2].clone(),
+    };
+
+    let db_path: String = match args[3].is_empty() {
+        true => env::current_dir().unwrap().to_string_lossy().to_string(),
+        false => args[3].clone(),
+    };
+
+    let working_dir: PathBuf = match args[4].is_empty() {
+        true => env::current_dir().unwrap().join("metadata.db"),
+        false => PathBuf::from(args[3].clone()).join("metadata.db"),
+    };
+
     let addr = format!("{}:{}", host, port);
     let listener = TcpListener::bind(addr.clone())?;
-    println!("Server listening on port {addr}, workdir: {working_dir}");
+
+    println!("Server listening on port {addr}");
+
+    meta_sqlite::get_connection(Some(db_path.clone()));
 
     loop {
         let (stream, _) = listener.accept()?;
         let db_path = db_path.clone();
         let working_dir = working_dir.clone();
         std::thread::spawn(move || {
-            if let Err(e) = RequestHandler::handle_client(stream, db_path.as_ref(), &working_dir) {
+            if let Err(e) = RequestHandler::handle_client(stream, Some(&db_path), &working_dir) {
                 eprintln!("Error handling client: {:?}", e);
             }
         });
