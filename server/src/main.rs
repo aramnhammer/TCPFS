@@ -216,7 +216,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Server listening on port {addr}");
 
-    meta_sqlite::get_connection(Some(db_path.clone()));
+    // FIXME: get con initializes the db, when inevitably we re-work the db connection stuff (maybe with a MVCC DB) 
+    // we should refactor this to be clearer
+    let _ = meta_sqlite::get_connection(Some(db_path.clone()));
 
     loop {
         let (stream, _) = listener.accept()?;
