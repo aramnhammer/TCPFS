@@ -20,10 +20,30 @@ COMMAND TYPES:
 */
 
 /*
+LIST REQUEST:
+header:
++----------------------+--------------------+----------------------+
+|          0x02        | Path Length (32 bits)| bucket_id (128 bits)|
++----------------------+--------------------+----------------------+
++-----------------------------------------------------------------------------------------+
+|        Relative Path (variable length)                                                  |
++-----------------------------------------------------------------------------------------+
+LIST RESPONSE (REPEATING):
+
++------------------------------+--------------------------+--------------------+------------------------------------------+
+|    1 byte (0==file, 1==dir)    | Path Length (32 bits) |  bucket_id (128 bits)     |    File/Dir size length ( 32 bits ) |
++------------------------------+--------------------------+----------------------+-----------------------------------------+
++----------------------+--------------------+----------------------+----------------------+
+|                                Path
++----------------------+--------------------+----------------------+----------------------+
+\r\n
+*/
+
+/*
 DOWNLOAD REQUEST:
 header:
 +----------------------+--------------------+----------------------+
-|          0x02        | Path Length (4 byte)| bucket_id (128 bits)|
+|          0x02        | Path Length (32 bits)| bucket_id (128 bits)|
 +----------------------+--------------------+----------------------+
 +-----------------------------------------------------------------------------------------+
 |        Relative Path (variable length)                                                  |
@@ -38,11 +58,9 @@ DOWNLOAD RESPONSE:
 UPLOAD REQUEST:
 header:
 +----------------------+--------------------+----------------------+----------------------+
-| Command Type (1 byte)| Path Length (4 byte)| File Length (4 byte)| bucket_id (128 bits) |
+| Command Type (8 bits)| Path Length (32 bits)| File Length (32 bits)| bucket_id (128 bits) |
 +----------------------+--------------------+----------------------+----------------------+
 data:
-+-----------------------------------------------------------------------------------------+
-|        Relative Path (variable length)                                                  |
 +-----------------------------------------------------------------------------------------+
 |        Relative Path (variable length)                                                  |
 +-----------------------------------------------------------------------------------------+
@@ -84,7 +102,7 @@ impl RequestHandler {
             0x04 => {
                 println!("LIST command received");
                 // Call your list handling function here
-                //handle_list(&mut stream).await?;
+                Self::handle_list(stream, db_path)?;
             }
 
             0x05 => {
@@ -97,6 +115,39 @@ impl RequestHandler {
                 // Handle unknown commands here, possibly returning an error or ignoring
             }
         }
+        Ok(())
+    }
+
+    fn handle_list(mut stream: TcpStream, db_path: Option<&String>) -> Result<(), Box<dyn Error>> {
+        let mut path_length_buf: [u8; 4] = [0; 4];
+        stream.read_exact(&mut path_length_buf)?;
+        let path_length = u32::from_be_bytes(path_length_buf);
+        let mut relative_path_buf = vec![0; path_length as usize];
+        stream.read_exact(&mut relative_path_buf)?;
+        let relative_path = String::from_utf8(relative_path_buf).expect("Invalid UTF-8 in path");
+
+        let mut file_length_buf = [0; 4];
+        stream.read_exact(&mut file_length_buf)?;
+        let file_length = u32::from_be_bytes(file_length_buf);
+
+        // FIXME: Lots of allocs happening here, probably could be done better
+        let mut bucket_id_buf = [0; 16];
+        stream.read_exact(&mut bucket_id_buf)?;
+        let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
+
+        let con = meta_sqlite::get_connection(db_path.cloned()).unwrap();
+        for mut obj in
+            meta_sqlite::get_by_bucket_and_relative_path(&con, &bucket_id, &relative_path)
+                .unwrap()
+                .into_iter()
+        {
+            obj.is_dir = match PathBuf::from(&obj.path).is_dir() {
+                true => 0,
+                false => 1,
+            };
+            stream.write_all(&obj.serialize().clone()).unwrap();
+        }
+
         Ok(())
     }
 
@@ -152,7 +203,6 @@ impl RequestHandler {
         Ok(())
     }
     fn handle_delete() {}
-    fn handle_list() {}
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -163,15 +213,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let host = args.get(1).unwrap_or(&default_host);
     let port = args.get(2).unwrap_or(&defualt_port);
 
+    let default_common_dir = ".tcpfs_store";
     let default_db_path = env::current_dir()
         .unwrap()
+        .join(&default_common_dir)
         .join("metadata.db")
         .to_string_lossy()
         .to_string();
     let db_path = args.get(3).unwrap_or(&default_db_path);
+    fs::create_dir_all(PathBuf::from(db_path.clone()).parent().unwrap()).unwrap();
 
     let default_working_dir = env::current_dir()
         .unwrap()
+        .join(&default_common_dir)
         .join("file_store")
         .to_string_lossy()
         .to_string();
