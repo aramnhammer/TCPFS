@@ -122,15 +122,11 @@ impl RequestHandler {
         let mut path_length_buf: [u8; 4] = [0; 4];
         stream.read_exact(&mut path_length_buf)?;
         let path_length = u32::from_be_bytes(path_length_buf);
+        
         let mut relative_path_buf = vec![0; path_length as usize];
         stream.read_exact(&mut relative_path_buf)?;
         let relative_path = String::from_utf8(relative_path_buf).expect("Invalid UTF-8 in path");
 
-        let mut file_length_buf = [0; 4];
-        stream.read_exact(&mut file_length_buf)?;
-        let file_length = u32::from_be_bytes(file_length_buf);
-
-        // FIXME: Lots of allocs happening here, probably could be done better
         let mut bucket_id_buf = [0; 16];
         stream.read_exact(&mut bucket_id_buf)?;
         let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
