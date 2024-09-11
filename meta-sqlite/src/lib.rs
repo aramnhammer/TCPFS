@@ -257,7 +257,7 @@ pub fn get_by_bucket_and_relative_path(
     path: &str,
 ) -> Result<Vec<Object>> {
     let mut stmt =
-        con.prepare("SELECT id, bucket_id, path FROM objects WHERE bucket_id=? AND path LIKE ?")?;
+        con.prepare("SELECT id, bucket_id, size path FROM objects WHERE bucket_id=? AND path LIKE ?")?;
     let object_iter = stmt.query_map(params![bucket_id, format!("{}%", path)], |row| {
         Ok(Object {
             is_dir: 0,

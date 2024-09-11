@@ -102,7 +102,7 @@ impl RequestHandler {
             0x04 => {
                 println!("LIST command received");
                 // Call your list handling function here
-                Self::handle_list(stream, db_path)?;
+                Self::handle_list(stream, db_path).unwrap_err();
             }
 
             0x05 => {
@@ -123,13 +123,13 @@ impl RequestHandler {
         stream.read_exact(&mut path_length_buf)?;
         let path_length = u32::from_be_bytes(path_length_buf);
         
-        let mut relative_path_buf = vec![0; path_length as usize];
-        stream.read_exact(&mut relative_path_buf)?;
-        let relative_path = String::from_utf8(relative_path_buf).expect("Invalid UTF-8 in path");
-
         let mut bucket_id_buf = [0; 16];
         stream.read_exact(&mut bucket_id_buf)?;
         let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
+
+        let mut relative_path_buf = vec![0; path_length as usize];
+        stream.read_exact(&mut relative_path_buf)?;
+        let relative_path = String::from_utf8(relative_path_buf).expect("Invalid UTF-8 in path");
 
         let con = meta_sqlite::get_connection(db_path.cloned()).unwrap();
         for mut obj in
