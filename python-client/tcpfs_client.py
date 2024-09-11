@@ -156,46 +156,56 @@ def list_bucket(server_ip: str, server_port: int, list_request: ListRequest):
 class Command(Enum):
     UPLOAD = '0x01'
     LIST = '0x02'
-    
+
 
 def main():
     # Argument parsing
     parser = argparse.ArgumentParser(description="Send an upload request to a TCPFS server.")
     parser.add_argument("--host", type=str, required=True, help="The server IP or hostname to connect to.")
     parser.add_argument("--port", type=int, required=True, help="The port on the server to connect to.")
-    parser.add_argument("--key", type=str, required=True, help="The key of the file being uploaded. "
+    subparsers = parser.add_subparsers(dest="command", help="tcpfs commands")
+    upload_parser = subparsers.add_parser(name="upload")
+    upload_parser.add_argument("--key", type=str, required=True, help="The key of the file being uploaded. "
                                                                "This can be a path on the server")
-    parser.add_argument("--file", type=str, required=True, help="The path to the file to be uploaded.")
-    parser.add_argument("--bucket", type=str, help="The bucket UUID (will be auto-generated if not provided).")
+    upload_parser.add_argument("--file", type=str, required=True, help="The path to the file to be uploaded.")
+    upload_parser.add_argument("--bucket", type=str, help="The bucket UUID (will be auto-generated if not provided).")
+
+    list_parser = subparsers.add_parser(name="list")
+    list_parser.add_argument("--key", type=str, required=False, default=".")
+    list_parser.add_argument("--bucket_id", type=str, required=True)
 
     args = parser.parse_args()
-
-    # Read the file data
-    try:
-        with open(args.file, 'rb') as f:
-            file_data = f.read()
-    except FileNotFoundError:
-        print(f"File not found: {args.file}")
-        return
-
-    # Generate or use provided bucket UUID
-    if args.bucket:
+    if args.command == "upload":
+        print("uploading file")
+        # Read the file data
         try:
-            bucket_id = uuid.UUID(args.bucket)
-        except ValueError:
-            print(f"Invalid UUID format for bucket: {args.bucket}")
+            with open(args.file, 'rb') as f:
+                file_data = f.read()
+        except FileNotFoundError:
+            print(f"File not found: {args.file}")
             return
-    else:
-        bucket_id = uuid.uuid4()
 
-    # Command type is hardcoded to 0x01 for upload, can be changed if needed
+        # Generate or use provided bucket UUID
+        if args.bucket:
+            try:
+                bucket_id = uuid.UUID(args.bucket)
+            except ValueError:
+                print(f"Invalid UUID format for bucket: {args.bucket}")
+                return
+        else:
+            bucket_id = uuid.uuid4()
 
-    # Create an UploadRequest instance
-    upload_request = UploadRequest(args.key, file_data, bucket_id)
+        # Command type is hardcoded to 0x01 for upload, can be changed if needed
 
-    # Send the upload request to the server
-    send_upload_request(args.host, args.port, upload_request)
+        # Create an UploadRequest instance
+        upload_request = UploadRequest(args.key, file_data, bucket_id)
 
+        # Send the upload request to the server
+        send_upload_request(args.host, args.port, upload_request)
+    if args.command == "list":
+        print("geting object list")
+        lr = ListRequest(path_from=args.key, bucket_id=args.bucket_id)
+        objects = list_bucket(args.host, args.port, lr)
 
 if __name__ == "__main__":
     main()
