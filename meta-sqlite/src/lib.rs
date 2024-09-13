@@ -113,18 +113,38 @@ mod tests {
 
         // test root dir
         let objects = get_objects_in_path(&con, "testid", "/path/").unwrap();
-        println!("num objects: {}",objects.len());
+        assert_eq!(objects.len(), 2);
 
         // test sub dir, one
         let objects = get_objects_in_path(&con, "testid", "/path/one/").unwrap();
-        println!("num objects: {}",objects.len());
+        assert_eq!(objects.len(), 1);
 
 
         // test sub dir, two
         let objects = get_objects_in_path(&con, "testid", "/path/two/").unwrap();
-        println!("num objects: {}",objects.len());
+        assert_eq!(objects.len(), 0);
 
+        let tx = start_transaction(&mut con);
+        insert_metadata(&tx, "testid", "/path/two/0", "1024").unwrap();
+        insert_metadata(&tx, "testid", "/path/two/1", "1024").unwrap();
+        insert_metadata(&tx, "testid", "/path/two/2", "1024").unwrap();
+        insert_metadata(&tx, "testid", "/path/two/3", "1024").unwrap();
+        insert_metadata(&tx, "testid", "/path/two/4", "1024").unwrap();
+        tx.commit().unwrap();
+
+
+        let objects = get_objects_in_path(&con, "testid", "/path/two/").unwrap();
+        assert_eq!(objects.len(), 5);
+
+
+        let tx = start_transaction(&mut con);
+        insert_metadata(&tx, "testid", "/path/two/0/0", "1024").unwrap();
+        tx.commit().unwrap();
+
+        let objects = get_objects_in_path(&con, "testid", "/path/two/").unwrap();
+        assert_eq!(objects.len(), 5);
         
+
   }
 }
 
