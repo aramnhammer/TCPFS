@@ -1,9 +1,9 @@
 use std::{
     fmt::{self, format},
-    path::{self, Path, PathBuf},
+    path::{self, Display, Path, PathBuf},
 };
 
-use rusqlite::{params, Connection, Error, Result, Rows, Transaction};
+use rusqlite::{params, Connection, Error, Result, Rows, Statement, Transaction};
 // FIXME: Build a common error thing
 
 #[cfg(test)]
@@ -15,7 +15,7 @@ mod tests {
     extern crate tempdir;
 
     fn init() -> Connection {
-        let con = get_connection().unwrap();
+        let con = get_connection(None).unwrap();
         init_db(&con).unwrap();
         return con;
     }
@@ -100,6 +100,32 @@ mod tests {
 
         assert_eq!(bucket_total_size, 0);
     }
+
+    #[test]
+    fn test_get_by_bucket() {
+        let mut con = init();
+        let tx = start_transaction(&mut con);
+        insert_metadata(&tx, "testid", "/path", "1024").unwrap();
+        insert_metadata(&tx, "testid", "/path/one", "1024").unwrap();
+        insert_metadata(&tx, "testid", "/path/two", "1024").unwrap();
+        insert_metadata(&tx, "testid", "/path/one/two", "1024").unwrap();
+        tx.commit().unwrap();
+
+        // test root dir
+        let objects = get_objects_in_path(&con, "testid", "/path/").unwrap();
+        println!("num objects: {}",objects.len());
+
+        // test sub dir, one
+        let objects = get_objects_in_path(&con, "testid", "/path/one/").unwrap();
+        println!("num objects: {}",objects.len());
+
+
+        // test sub dir, two
+        let objects = get_objects_in_path(&con, "testid", "/path/two/").unwrap();
+        println!("num objects: {}",objects.len());
+
+        
+  }
 }
 
 pub fn get_connection(db_path: Option<String>) -> Result<Connection> {
@@ -130,11 +156,11 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     conn.execute(
         " -- reference table for objects on disk
     CREATE TABLE IF NOT EXISTS objects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    bucket_id TEXT NOT NULL,
-    path TEXT,
-    file_size INTEGER,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bucket_id TEXT NOT NULL,
+      path TEXT,
+      file_size INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(bucket_id, path),
     FOREIGN KEY (bucket_id) REFERENCES buckets(bucket_id)
     ON DELETE CASCADE);
@@ -215,58 +241,40 @@ pub fn insert_metadata(
         .unwrap())
 }
 
+
 #[derive(Debug)]
 pub struct Object {
-    pub is_dir: u8,          // will default to true, the updated before sent to the client
-    pub path: String,        // Path of the file or directory
-    pub bucket_id: [u8; 16], // 128-bit bucket ID (16 bytes)
-    pub size: u32,           // File or directory size (32-bit)
+    pub id: i32,
+//    pub bucket_id: [u8; 16], // 128-bit bucket ID (16 bytes)
+    pub bucket_id: String,
+    pub path: String,
+    pub file_size: i64,
 }
 
-impl Object {
-    // Function to serialize the object to the specified binary format
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut result = Vec::new();
+pub fn get_objects_in_path(con: &Connection, bucket_id: &str ,root_path: &str) -> Result<Vec<Object>>
+{
+  let mut stmt = con.prepare(r#"
+  SELECT id, bucket_id, path, file_size
+  FROM objects 
+    WHERE bucket_id = ?
+    AND path LIKE ?
+    AND path NOT LIKE ?;
+  "#)?;
+  let root_like = format!("{}%", root_path);        // To match the root path
+  let exclude_subdirs = format!("{}%/%", root_path); // To exclude subdirectories
+  let object_iter = stmt.query_map(&[bucket_id, root_like.as_str(), exclude_subdirs.as_str()], |row|
 
-        // 1 byte: 0 for file, 1 for directory
-        result.extend_from_slice(&self.is_dir.to_be_bytes());
-
-        // Path length (32-bit, big-endian)
-        let path_len = self.path.len() as u32;
-        result.extend_from_slice(&path_len.to_be_bytes());
-
-        // 128-bit bucket ID
-        result.extend_from_slice(&self.bucket_id);
-
-        // File/dir size (32-bit, big-endian)
-        result.extend_from_slice(&self.size.to_be_bytes());
-
-        // Path bytes
-        result.extend_from_slice(self.path.as_bytes());
-
-        // Separator "\r\n"
-        result.extend_from_slice(b"\r\n");
-
-        result
-    }
+  //let object_iter = stmt.query_map(&[bucket_id, root_like.as_str()], |row|
+  {
+    Ok(Object
+    {
+         id: row.get(0)?,
+         bucket_id: row.get(1)?,
+         path: row.get(2)?,
+         file_size: row.get(3)?,
+    })
+  })?;
+  let objects: Result<Vec<Object>> = object_iter.collect();
+  objects
 }
 
-pub fn get_by_bucket_and_relative_path(
-    con: &Connection,
-    bucket_id: &str,
-    path: &str,
-) -> Result<Vec<Object>> {
-    let mut stmt =
-        con.prepare("SELECT id, bucket_id, size path FROM objects WHERE bucket_id=? AND path LIKE ?")?;
-    let object_iter = stmt.query_map(params![bucket_id, format!("{}%", path)], |row| {
-        Ok(Object {
-            is_dir: 0,
-            bucket_id: row.get(1)?,
-            path: row.get(2)?,
-            size: row.get(3)?,
-        })
-    })?;
-
-    let objects: Result<Vec<Object>> = object_iter.collect();
-    objects
-}
