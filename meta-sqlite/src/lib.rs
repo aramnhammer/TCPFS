@@ -3,6 +3,7 @@ use std::{
     path::{self, Display, Path, PathBuf},
 };
 
+
 use rusqlite::{params, Connection, Error, Result, Rows, Statement, Transaction};
 // FIXME: Build a common error thing
 
@@ -270,6 +271,35 @@ pub struct Object {
     pub path: String,
     pub file_size: i64,
 }
+
+
+impl Object
+{
+  pub fn serialize(&self) -> Vec<u8> 
+  {
+        let mut result = Vec::new();
+
+        // Path length (32-bit, big-endian)
+        let path_len = self.path.len() as u32;
+        result.extend_from_slice(&path_len.to_be_bytes());
+
+        // 128-bit bucket ID
+        result.extend_from_slice(&self.bucket_id.as_bytes());
+
+        // Path bytes
+        result.extend_from_slice(self.path.as_bytes());
+
+        // File/dir size (32-bit, big-endian)
+        result.extend_from_slice(&self.file_size.to_be_bytes());
+
+        // Separator "\r\n"
+        result.extend_from_slice(b"\r\n");
+
+        result
+    }
+} 
+
+
 
 pub fn get_objects_in_path(con: &Connection, bucket_id: &str ,root_path: &str) -> Result<Vec<Object>>
 {

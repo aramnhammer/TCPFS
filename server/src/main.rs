@@ -1,4 +1,4 @@
-use meta_sqlite;
+
 use std::{
     default, env,
     error::Error,
@@ -133,14 +133,14 @@ impl RequestHandler {
 
         let con = meta_sqlite::get_connection(db_path.cloned()).unwrap();
         for mut obj in
-            meta_sqlite::get_by_bucket_and_relative_path(&con, &bucket_id, &relative_path)
+            meta_sqlite::get_objects_in_path(&con, &bucket_id, &relative_path)
                 .unwrap()
                 .into_iter()
         {
-            obj.is_dir = match PathBuf::from(&obj.path).is_dir() {
-                true => 0,
-                false => 1,
-            };
+            //obj.is_dir = match PathBuf::from(&obj.path).is_dir() {
+            //    true => 0,
+            //    false => 1,
+            //};
             stream.write_all(&obj.serialize().clone()).unwrap();
         }
 
