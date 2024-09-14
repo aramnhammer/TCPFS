@@ -29,3 +29,7 @@ Cargo.lock
 
 # .db files
 *.db*
+
+*.swp
+.DS_Store
+.vscode/
