@@ -158,8 +158,56 @@ def list_bucket(server_ip: str, server_port: int, list_request: ListRequest):
 
 class Command(Enum):
     UPLOAD = '0x01'
-    LIST = '0x02'
+    DOWNLOAD = '0x02'
+    DELETE_OBJECT = '0x03'
+    LIST = '0x04'
+    DELETE_BUCKET = '0x05'
 
+
+
+def send_download_request_and_receive_response(host, port, bucket_id, relative_path):
+    # Command type for DOWNLOAD (1 byte)
+    command_type = 0x02
+
+    # Convert the relative path to bytes and calculate its length
+    relative_path_bytes = relative_path.encode('utf-8')
+    path_length = len(relative_path_bytes)
+
+    # Construct the DOWNLOAD REQUEST manually as bytes
+    request = bytearray()
+
+    # Append the command type (1 byte)
+    request.append(command_type)
+
+    # Append the path length (4 bytes, big-endian)
+    request += path_length.to_bytes(4, 'big')
+
+    # Append the bucket_id (16 bytes)
+    request += uuid.UUID(bucket_id).bytes
+
+    # Append the relative path (variable length)
+    request += relative_path_bytes
+
+    # Send the request over the socket and read the response
+    file_data = b""
+
+    try:
+        # Create a socket connection to the server
+        with socket.create_connection((host, port)) as sock:
+            # Send the request
+            sock.sendall(request)
+
+            # Receive the file data (variable length)
+            buffer_size = 4096  # You can adjust the buffer size
+            while True:
+                chunk = sock.recv(buffer_size)
+                if not chunk:
+                    break
+                file_data += chunk
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+    return file_data
 
 
 def main():
@@ -167,12 +215,18 @@ def main():
     parser = argparse.ArgumentParser(description="Send an upload request to a TCPFS server.")
     parser.add_argument("--host", type=str, required=True, help="The server IP or hostname to connect to.")
     parser.add_argument("--port", type=int, required=True, help="The port on the server to connect to.")
-    subparsers = parser.add_subparsers(dest="command", help="tcpfs commands")
+    
+    subparsers = parser.add_subparsers(dest="command", help="tcpfs commands") 
     upload_parser = subparsers.add_parser(name="upload")
     upload_parser.add_argument("--key", type=str, required=True, help="The key of the file being uploaded. "
                                                                "This can be a path on the server")
     upload_parser.add_argument("--file", type=str, required=True, help="The path to the file to be uploaded.")
     upload_parser.add_argument("--bucket", type=str, help="The bucket UUID (will be auto-generated if not provided).")
+
+    download_parser = subparsers.add_parser(name="download")
+    download_parser.add_argument("--key", type=str, required=True, help="They key of the file being uploaded")
+    download_parser.add_argument("--bucket", type=str, required=True, help="bucket id, UUID")
+    download_parser.add_argument("--destination", type=str, required=True, help="Where to write the file")
 
     list_parser = subparsers.add_parser(name="list")
     list_parser.add_argument("--key", type=str, required=False, default=".")
@@ -191,7 +245,7 @@ def main():
 
         # Generate or use provided bucket UUID
         if args.bucket:
-            bucket_id = uuid.UUID(bucket_id)
+            bucket_id = uuid.UUID(args.bucket)
         else:
             bucket_id = uuid.uuid4()
         print(bucket_id)
@@ -204,6 +258,13 @@ def main():
         # Send the upload request to the server
         send_upload_request(args.host, args.port, upload_request)
     
+    if args.command == "download":
+        print("download file")
+        ret = send_download_request_and_receive_response(args.host, args.port, args.bucket, args.key)
+        with open(args.destination, 'wb') as f:
+            f.write(ret)
+
+
     if args.command == "list":
         print("geting object list")
         print(args.bucket)

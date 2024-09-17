@@ -10,6 +10,7 @@ use std::{
     time::Duration,
 };
 
+
 /*
 COMMAND TYPES:
 0x01 -> UPLOAD | this will create a 'bucket' automatically |
@@ -42,9 +43,9 @@ LIST RESPONSE (REPEATING):
 /*
 DOWNLOAD REQUEST:
 header:
-+----------------------+--------------------+----------------------+
-|          0x02        | Path Length (32 bits)| bucket_id (128 bits)|
-+----------------------+--------------------+----------------------+
++----------------------+----------------------+----------------------+
+|          0x02        | Path Length (32 bits)| bucket_id (128 bits) |
++----------------------+----------------------+----------------------+
 +-----------------------------------------------------------------------------------------+
 |        Relative Path (variable length)                                                  |
 +-----------------------------------------------------------------------------------------+
@@ -92,7 +93,7 @@ impl RequestHandler {
             0x02 => {
                 println!("DOWNLOAD command received");
                 // Call your download handling function here
-                //Self::handle_download(stream).await?;
+                Self::handle_download(stream, db_path, working_dir)?;
             }
             0x03 => {
                 println!("DELETE command received");
@@ -137,17 +138,45 @@ impl RequestHandler {
                 .unwrap()
                 .into_iter()
         {
-            //obj.is_dir = match PathBuf::from(&obj.path).is_dir() {
-            //    true => 0,
-            //    false => 1,
-            //};
             stream.write_all(&obj.serialize().clone()).unwrap();
         }
 
         Ok(())
     }
 
-    fn handle_download() {}
+    fn handle_download(
+        mut stream: TcpStream,
+        db_path: Option<&String>,
+        working_dir: &PathBuf,
+    
+    ) -> Result<(), Box<dyn Error>> {
+        let mut path_length_buf = [0; 4];
+        stream.read_exact(&mut path_length_buf)?;
+        let path_length = u32::from_be_bytes(path_length_buf);
+
+        // FIXME: Lots of allocs happening here, probably could be done better
+        let mut bucket_id_buf = [0; 16];
+        stream.read_exact(&mut bucket_id_buf)?;
+        let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
+
+        let mut con = meta_sqlite::get_connection(db_path.cloned()).unwrap();
+        let trans = meta_sqlite::start_transaction(&mut con);
+
+        let mut relative_path_buf = vec![0; path_length as usize];
+        stream.read_exact(&mut relative_path_buf)?;
+        let relative_path = String::from_utf8(relative_path_buf).expect("Invalid UTF-8 in path");
+
+        let pb = PathBuf::new();
+        let target= pb
+            .join(working_dir)
+            .join(bucket_id.clone())
+            .join(relative_path.clone());
+        match target.is_file(){
+            true => std::io::copy(&mut fs::File::open(&target).unwrap(), &mut stream)?,
+            false => Err("Invalid key path")?
+        };
+        Ok(())
+    }
 
     fn handle_upload(
         mut stream: TcpStream,

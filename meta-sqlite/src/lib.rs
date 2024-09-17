@@ -159,6 +159,7 @@ pub fn get_connection(db_path: Option<String>) -> Result<Connection> {
     Ok(con)
 }
 
+
 pub fn init_db(conn: &Connection) -> Result<()> {
     // Enable WAL mode
     conn.pragma_update(None, "journal_mode", &"WAL")?;
@@ -266,17 +267,17 @@ pub fn insert_metadata(
 #[derive(Debug)]
 pub struct Object {
     pub id: i32,
-//    pub bucket_id: [u8; 16], // 128-bit bucket ID (16 bytes)
     pub bucket_id: String,
     pub path: String,
     pub file_size: i64,
+    //pub is_dir: bool
 }
 
 
 impl Object
 {
-  pub fn serialize(&self) -> Vec<u8> 
-  {
+    pub fn serialize(&self) -> Vec<u8> 
+    {
         let mut result = Vec::new();
 
         // Path length (32-bit, big-endian)
@@ -297,7 +298,7 @@ impl Object
 
         result
     }
-} 
+}
 
 
 
@@ -322,9 +323,12 @@ pub fn get_objects_in_path(con: &Connection, bucket_id: &str ,root_path: &str) -
          bucket_id: row.get(1)?,
          path: row.get(2)?,
          file_size: row.get(3)?,
+
     })
   })?;
   let objects: Result<Vec<Object>> = object_iter.collect();
   objects
 }
+
+
 
