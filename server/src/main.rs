@@ -250,6 +250,7 @@ data:
             
         let dest_parent = destination.parent().unwrap();
         std::fs::create_dir_all(dest_parent).unwrap();
+
         meta_sqlite::insert_metadata(
             &trans,
             bucket_id.as_str(),

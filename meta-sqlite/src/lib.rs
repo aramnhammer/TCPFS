@@ -260,8 +260,8 @@ pub fn insert_metadata(
 ) -> Result<usize, Error> {
     Ok(tx
         .execute(
-            "INSERT INTO objects (bucket_id, path, file_size, created_at) VALUES(?,?,?, ?)",
-            &[bucket_id, path, size],
+            "INSERT INTO objects (bucket_id, key, path, file_size, created_at) VALUES(?,?,?,?,?)",
+            &[bucket_id, key, path, size, created_at],
         )
         .unwrap())
 }
