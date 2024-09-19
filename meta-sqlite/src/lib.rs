@@ -180,9 +180,10 @@ pub fn init_db(conn: &Connection) -> Result<()> {
     CREATE TABLE IF NOT EXISTS objects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       bucket_id TEXT NOT NULL,
+      key TEXT,
       path TEXT,
       file_size INTEGER,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL,
     UNIQUE(bucket_id, path),
     FOREIGN KEY (bucket_id) REFERENCES buckets(bucket_id)
     ON DELETE CASCADE);
@@ -252,12 +253,14 @@ pub fn delete_metadata(tx: &Transaction, bucket_id: &str, path: &str) -> Result<
 pub fn insert_metadata(
     tx: &Transaction,
     bucket_id: &str,
+    key: &str,
     path: &str,
     size: &str,
+    created_at: &str
 ) -> Result<usize, Error> {
     Ok(tx
         .execute(
-            "INSERT INTO objects (bucket_id, path, file_size) VALUES(?,?,?)",
+            "INSERT INTO objects (bucket_id, path, file_size, created_at) VALUES(?,?,?, ?)",
             &[bucket_id, path, size],
         )
         .unwrap())
