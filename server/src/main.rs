@@ -91,11 +91,6 @@ impl RequestHandler {
         Ok(())
     }
 
-    //fn iso8601_now() -> (String, String>)
-    //{
-    //    let dt: DateTime<Utc> = SystemTime::now().clone().into();
-    //    format!("{}", dt.format("%+"))
-    //}
 
     fn iso8601_now() -> (String, (i32, u32, u32, u32, u32, u32, u32)) 
     {
@@ -246,7 +241,7 @@ data:
             .join(parts.4.to_string())
             .join(parts.5.to_string())
             .join(parts.6.to_string())
-            .join(iso.clone());
+            .join("file.data".to_string());
             
         let dest_parent = destination.parent().unwrap();
         std::fs::create_dir_all(dest_parent).unwrap();
