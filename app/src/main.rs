@@ -104,7 +104,7 @@ impl eframe::App for App {
                         let hh = h.clone();
                         body.row(10.0, |mut row| {
                             row.col(|ui| {
-                                if ui.label(hh.bucket_id.unwrap_or_default()).clicked() {
+                                if ui.label(&hh.bucket_id.unwrap_or_default()).clicked() {
                                     self.selected_host = hh.clone();
                                 };
                             });

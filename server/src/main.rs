@@ -21,25 +21,6 @@ COMMAND TYPES:
 0x06 -> DELETE BUCKET -> u64 (bytes freed)
 */
 
-/*
-LIST REQUEST:
-header:
-+----------------------+--------------------+----------------------+
-|          0x02        | Path Length (32 bits)| bucket_id (128 bits)|
-+----------------------+--------------------+----------------------+
-+-----------------------------------------------------------------------------------------+
-|        Relative Path (variable length)                                                  |
-+-----------------------------------------------------------------------------------------+
-LIST RESPONSE (REPEATING):
-
-+------------------------------+--------------------------+--------------------+------------------------------------------+
-|    1 byte (0==file, 1==dir)    | Path Length (32 bits) |  bucket_id (128 bits)     |    File/Dir size length ( 32 bits ) |
-+------------------------------+--------------------------+----------------------+-----------------------------------------+
-+----------------------+--------------------+----------------------+----------------------+
-|                                Path
-+----------------------+--------------------+----------------------+----------------------+
-\r\n
-*/
 
 struct RequestHandler;
 
@@ -113,23 +94,41 @@ impl RequestHandler {
         (iso8601, deconstructed)
     }
 
+/*
+LIST REQUEST:
+header:
++----------------------+--------------------+----------------------+
+|          0x02        | Path Length (32 bits)| bucket_id (128 bits)|
++----------------------+--------------------+----------------------+
++-----------------------------------------------------------------------------------------+
+|        Relative Path (variable length)                                                  |
++-----------------------------------------------------------------------------------------+
+LIST RESPONSE (REPEATING):
 
++------------------------------+--------------------------+--------------------+------------------------------------------+
+|    1 byte (0==file, 1==dir)    | Path Length (32 bits) |  bucket_id (128 bits)     |    File/Dir size length ( 32 bits ) |
++------------------------------+--------------------------+----------------------+-----------------------------------------+
++----------------------+--------------------+----------------------+----------------------+
+|                                Path
++----------------------+--------------------+----------------------+----------------------+
+\r\n
+*/
     fn handle_list(mut stream: TcpStream, db_path: Option<&String>) -> Result<(), Box<dyn Error>> 
     {
-        let mut path_length_buf: [u8; 4] = [0; 4];
-        stream.read_exact(&mut path_length_buf)?;
-        let path_length = u32::from_be_bytes(path_length_buf);
+        let mut key_length_buf: [u8; 4] = [0; 4];
+        stream.read_exact(&mut key_length_buf)?;
+        let key_length = u32::from_be_bytes(key_length_buf);
 
         let mut bucket_id_buf = [0; 16];
         stream.read_exact(&mut bucket_id_buf)?;
         let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
 
-        let mut relative_path_buf = vec![0; path_length as usize];
-        stream.read_exact(&mut relative_path_buf)?;
-        let relative_path = String::from_utf8(relative_path_buf).expect("Invalid UTF-8 in path");
+        let mut key_buf = vec![0; key_length as usize];
+        stream.read_exact(&mut key_buf)?;
+        let key = String::from_utf8(key_buf).expect("Invalid UTF-8 in path");
 
         let con = meta_sqlite::get_connection(db_path.cloned()).unwrap();
-        for obj in meta_sqlite::get_objects_in_path(&con, &bucket_id, &relative_path)
+        for obj in meta_sqlite::get_objects_in_path(&con, &bucket_id, &key)
             .unwrap()
             .into_iter()
         {
