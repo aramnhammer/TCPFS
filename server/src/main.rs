@@ -144,10 +144,10 @@ impl RequestHandler {
 DOWNLOAD REQUEST:
 header:
 +----------------------+----------------------+----------------------+
-|          0x02        | Path Length (32 bits)| bucket_id (128 bits) |
+|          0x02        | Key Length (32 bits) | bucket_id (128 bits) |
 +----------------------+----------------------+----------------------+
 +-----------------------------------------------------------------------------------------+
-|        Relative Path (variable length)                                                  |
+|                              Key (variable length)                                      |
 +-----------------------------------------------------------------------------------------+
 DOWNLOAD RESPONSE:
 +-----------------------------------------------------------------------------------------+
@@ -160,9 +160,9 @@ DOWNLOAD RESPONSE:
         working_dir: &PathBuf,
     ) -> Result<(), Box<dyn Error>> 
     {
-        let mut path_length_buf = [0; 4];
-        stream.read_exact(&mut path_length_buf)?;
-        let path_length = u32::from_be_bytes(path_length_buf);
+        let mut key_length_buf = [0; 4];
+        stream.read_exact(&mut key_length_buf)?;
+        let path_length = u32::from_be_bytes(key_length_buf);
 
         // FIXME: Lots of allocs happening here, probably could be done better
         let mut bucket_id_buf = [0; 16];
@@ -170,17 +170,19 @@ DOWNLOAD RESPONSE:
         let bucket_id = uuid::Uuid::from_u128(u128::from_be_bytes(bucket_id_buf)).to_string();
 
         let mut con = meta_sqlite::get_connection(db_path.cloned()).unwrap();
-        let trans = meta_sqlite::start_transaction(&mut con);
+        let trans = meta_sqlite::start_transaction(&mut con); 
 
-        let mut relative_path_buf = vec![0; path_length as usize];
-        stream.read_exact(&mut relative_path_buf)?;
-        let relative_path = String::from_utf8(relative_path_buf).expect("Invalid UTF-8 in path");
+        let mut key_buf = vec![0; path_length as usize];
+        stream.read_exact(&mut key_buf)?;
+        let key = String::from_utf8(key_buf).expect("Invalid UTF-8 in path");
+
+        let path: String = meta_sqlite::get_metadata_by_key(&trans,
+                                                            bucket_id.as_str(),
+                                                            &key).unwrap();
 
         let pb = PathBuf::new();
         let target = pb
-            .join(working_dir)
-            .join(bucket_id.clone())
-            .join(relative_path.clone());
+            .join(path);
         match target.is_file() {
             true => std::io::copy(&mut fs::File::open(&target).unwrap(), &mut stream)?,
             false => Err("Invalid key path")?,

@@ -261,9 +261,24 @@ pub fn insert_metadata(
     Ok(tx
         .execute(
             "INSERT INTO objects (bucket_id, key, path, file_size, created_at) VALUES(?,?,?,?,?)",
-            &[bucket_id, key, path, size, created_at],
+            &[bucket_id, key, path, size, created_at]
         )
         .unwrap())
+}
+
+
+pub fn get_metadata_by_key( 
+    tx: &Transaction,
+    bucket_id: &str,
+    key: &str,
+) -> Result<String, Error> {
+    Ok(tx
+        .query_row(
+            "SELECT path FROM objects WHERE bucket_id=? AND key=?",
+            &[bucket_id, key], |row| row.get(0),
+        )?
+    )
+
 }
 
 
