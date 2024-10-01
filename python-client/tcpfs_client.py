@@ -252,7 +252,7 @@ def main():
 
         # Command type is hardcoded to 0x01 for upload, can be changed if needed
 
-        # Create an UploadRequest instance
+t       # Create an UploadRequest instance
         upload_request = UploadRequest(args.key, file_data, bucket_id)
 
         # Send the upload request to the server
