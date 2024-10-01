@@ -1,0 +1,15 @@
+[package]
+name = "protocol"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[dependencies]
+chrono = "0.4.38"
+meta-sqlite = { path = "../meta-sqlite" }
+
+[dependencies.uuid]
+version = "1.10.0"
+features = [
+    "v4",
+]
