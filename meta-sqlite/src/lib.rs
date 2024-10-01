@@ -184,6 +184,7 @@ pub fn init_db(conn: &Connection) -> Result<()> {
       path TEXT,
       file_size INTEGER,
       created_at TEXT NOT NULL,
+      deleted BOOL DEFAULT FALSE,
     UNIQUE(bucket_id, path),
     FOREIGN KEY (bucket_id) REFERENCES buckets(bucket_id)
     ON DELETE CASCADE);
@@ -274,7 +275,7 @@ pub fn get_metadata_by_key(
 ) -> Result<String, Error> {
     Ok(tx
         .query_row(
-            "SELECT path FROM objects WHERE bucket_id=? AND key=?",
+            "SELECT path FROM objects WHERE bucket_id=? AND key=? AND deleted=false",
             &[bucket_id, key], |row| row.get(0),
         )?
     )
