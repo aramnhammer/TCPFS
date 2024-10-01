@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.38"
 meta-sqlite = { path = "../meta-sqlite" }
+protocol = { path ="../protocol" }
 
 [dependencies.uuid]
 version = "1.10.0"
